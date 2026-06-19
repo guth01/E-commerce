@@ -34,6 +34,9 @@ public class OrderService {
     @Autowired
     private ProductService productService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     @Transactional
     public OrderResponse createOrder(OrderRequest request, String username) {
         User customer = findUserOrThrow(username);
@@ -48,6 +51,7 @@ public class OrderService {
                     "Insufficient stock. Available: " + product.getStock() + ", requested: " + request.getQuantity());
         }
 
+        // Decrement stock and persist back through the Product module.
         product.setStock(product.getStock() - request.getQuantity());
         productService.saveProduct(product);
 
@@ -58,6 +62,12 @@ public class OrderService {
         order.setStatus(OrderStatus.PENDING);
 
         Order saved = orderRepository.save(order);
+
+        // Fire-and-forget: this call returns immediately because
+        // sendOrderConfirmation is @Async. The HTTP response to the
+        // customer does NOT wait on the email actually being sent.
+        notificationService.sendOrderConfirmation(saved.getId());
+
         return OrderResponse.fromEntity(saved);
     }
 
